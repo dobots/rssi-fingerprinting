@@ -1,0 +1,30 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+	  xmlns:app="http://schemas.android.com/apk/res-auto"
+	  xmlns:tools="http://schemas.android.com/tools"
+	  tools:context="nl.dobots.rssifingerprinting.MainActivity">
+	<item
+		android:id="@+id/action_settings"
+		android:orderInCategory="100"
+		android:title="@string/action_settings"
+		app:showAsAction="never"/>
+	<item
+		android:id="@+id/action_exportDB"
+		android:orderInCategory="100"
+		android:title="Export DB"
+		app:showAsAction="never"/>
+	<item
+		android:id="@+id/action_filter"
+		android:orderInCategory="100"
+		android:title="Filter"
+		app:showAsAction="never"/>
+	<item
+		android:id="@+id/action_locate"
+		android:orderInCategory="100"
+		android:title="Locate"
+		app:showAsAction="never"/>
+	<item
+		android:id="@+id/action_deleteDB"
+		android:orderInCategory="100"
+		android:title="Delete DB"
+		app:showAsAction="never"/>
+</menu>

@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	xmlns:tools="http://schemas.android.com/tools"
+	android:layout_width="match_parent"
+	android:layout_height="match_parent"
+	android:paddingBottom="@dimen/activity_vertical_margin"
+	android:paddingLeft="@dimen/activity_horizontal_margin"
+	android:paddingRight="@dimen/activity_horizontal_margin"
+	android:paddingTop="@dimen/activity_vertical_margin"
+	tools:context="nl.dobots.rssifingerprinting.MainActivity">
+
+	<TextView
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:id="@+id/lblRoom"
+		android:text="Room Name:"
+		android:layout_alignParentTop="true"
+		android:layout_alignParentStart="true"
+		android:layout_marginStart="16dp"
+		android:layout_marginTop="16dp"
+		/>
+
+	<EditText
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:id="@+id/edtRoomName"
+		android:layout_alignBaseline="@+id/lblRoom"
+		android:layout_toEndOf="@+id/lblRoom"
+		android:layout_marginStart="35dp"
+		android:layout_alignParentEnd="true"
+		android:layout_marginEnd="16dp"
+		android:singleLine="true"
+		android:visibility="gone"
+		/>
+
+	<Spinner
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:id="@+id/spRoomName"
+		android:layout_alignBaseline="@+id/lblRoom"
+		android:layout_toEndOf="@+id/lblRoom"
+		android:layout_marginStart="35dp"
+		android:layout_alignParentEnd="true"
+		android:layout_marginEnd="16dp"
+		/>
+
+	<Button
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:text="Start"
+		android:id="@+id/btnStart"
+		android:layout_below="@+id/lblRoom"
+		android:layout_alignStart="@+id/lblRoom"
+		android:layout_marginTop="16dp"
+		/>
+
+	<Button
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:text="Stop"
+		android:id="@+id/btnStop"
+		android:layout_alignBottom="@+id/btnStart"
+		android:layout_toEndOf="@+id/btnStart"
+		android:layout_marginStart="35dp"
+		/>
+
+	<TextView
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:textAppearance="?android:attr/textAppearanceMedium"
+		android:text="Status:"
+		android:id="@+id/lblStatus"
+		android:layout_below="@+id/btnStart"
+		android:layout_alignStart="@+id/btnStart"
+		android:layout_marginTop="16dp"
+		/>
+
+	<TextView
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:textAppearance="?android:attr/textAppearanceMedium"
+		android:text="Last Scan"
+		android:id="@+id/lblLastUpdate"
+		android:layout_marginTop="16dp"
+		android:layout_below="@+id/lblStatus"
+		android:layout_alignStart="@+id/lblStatus"
+		/>
+
+	<TextView
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:textAppearance="?android:attr/textAppearanceMedium"
+		android:text="Idle"
+		android:id="@+id/txtStatus"
+		android:layout_above="@+id/lblLastUpdate"
+		android:layout_toRightOf="@id/lblStatus"
+		android:layout_marginLeft="56dp"
+		/>
+
+	<TextView
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:textAppearance="?android:attr/textAppearanceMedium"
+		android:id="@+id/txtLastScan"
+		android:layout_alignTop="@+id/lblLastUpdate"
+		android:layout_alignStart="@+id/txtStatus"
+		/>
+
+	<ListView
+		android:layout_width="wrap_content"
+		android:layout_height="wrap_content"
+		android:id="@+id/lvScan"
+		android:layout_below="@+id/lblLastUpdate"
+		android:layout_alignParentStart="true"
+		android:layout_marginTop="16dp"
+		/>
+
+</RelativeLayout>
