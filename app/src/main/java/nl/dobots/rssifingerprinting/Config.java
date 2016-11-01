@@ -40,7 +40,8 @@ public class Config {
 	public static final boolean WRITE_TO_DB = true;
 
 	public static final String LOG_FILES_DIRECTORY = Environment.getExternalStorageDirectory().getPath() + "/dobots/fingerprinting";
-	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.doBeacon;
+//	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.doBeacon;
+	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.all;
 
 	public static final SimpleDateFormat SDF_TIMESTAMP = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 	public static final SimpleDateFormat SDF_DISPLAY_TIMESTAMP = new SimpleDateFormat("MM-dd HH:mm:ss");

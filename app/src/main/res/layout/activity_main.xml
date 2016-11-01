@@ -21,7 +21,7 @@
 		android:layout_marginTop="16dp"
 		/>
 
-	<EditText
+	<AutoCompleteTextView
 		android:layout_width="wrap_content"
 		android:layout_height="wrap_content"
 		android:id="@+id/edtRoomName"
@@ -31,14 +31,13 @@
 		android:layout_alignParentEnd="true"
 		android:layout_marginEnd="16dp"
 		android:singleLine="true"
-		android:visibility="gone"
 		/>
 
 	<Spinner
 		android:layout_width="wrap_content"
 		android:layout_height="wrap_content"
 		android:id="@+id/spRoomName"
-		android:layout_alignBaseline="@+id/lblRoom"
+		android:layout_below="@id/edtRoomName"
 		android:layout_toEndOf="@+id/lblRoom"
 		android:layout_marginStart="35dp"
 		android:layout_alignParentEnd="true"
@@ -52,7 +51,7 @@
 		android:id="@+id/btnStart"
 		android:layout_below="@+id/lblRoom"
 		android:layout_alignStart="@+id/lblRoom"
-		android:layout_marginTop="16dp"
+		android:layout_marginTop="96dp"
 		/>
 
 	<Button

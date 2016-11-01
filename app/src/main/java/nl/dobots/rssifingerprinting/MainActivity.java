@@ -17,8 +17,10 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -30,18 +32,19 @@ import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 
 import nl.dobots.bluenet.ble.base.callbacks.IStatusCallback;
-import nl.dobots.bluenet.ble.extended.BleDeviceFilter;
 import nl.dobots.bluenet.ble.extended.structs.BleDevice;
 import nl.dobots.bluenet.ble.extended.structs.BleDeviceList;
 import nl.dobots.bluenet.service.BleScanService;
 import nl.dobots.bluenet.service.callbacks.EventListener;
 import nl.dobots.bluenet.service.callbacks.IntervalScanListener;
+import nl.dobots.loopback.util.BleScanServiceUploadHelper;
 import nl.dobots.rssifingerprinting.db.Fingerprint;
 import nl.dobots.rssifingerprinting.db.FingerprintDbAdapter;
+import nl.dobots.rssifingerprinting.db.LocationWithFingerprints;
 
 public class MainActivity extends AppCompatActivity implements EventListener, IntervalScanListener {
 
@@ -55,6 +58,8 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 
 	private boolean _started = false;
 
+	private BleScanServiceUploadHelper _uploadHelper;
+
 	private BleDeviceList _bleDeviceList;
 	private ListView _lvScan;
 
@@ -66,27 +71,28 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 	private FingerprintDbAdapter _fingerprintDb;
 
 	private String _roomName;
-//	private EditText _edtRoomName;
+	private EditText _edtRoomName;
 
-	private String[] roomNames = {
-			"DoBots Software",
-			"Peet",
-			"Hallway 1",
-			"Hallway 2",
-			"Hallway 3",
-			"DoBots Hardware",
-			"Proto Room",
-			"SMP Room",
-			"Almende",
-			"Allert"
-	};
+	private ArrayList<String> _roomNames = new ArrayList<>();
+//	private String[] _roomNames = {
+//			"Test",
+//			"DoBots Software",
+//			"Peet",
+//			"Hallway 1",
+//			"Hallway 2",
+//			"Hallway 3",
+//			"DoBots Hardware",
+//			"Proto Room",
+//			"SMP Room",
+//			"Almende",
+//			"Allert"
+//	};
 	private Spinner _spRoomName;
+	private ArrayAdapter<String> _arrayAdapter;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-
-		initUI();
 
 		_watchdog.postDelayed(_watchdogRunner, GUI_UPDATE_INTERVAL);
 
@@ -95,7 +101,14 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		_settings = Settings.getInstance(getApplicationContext());
 		_fingerprintDb = _settings.getDbAdapter(getApplicationContext());
 
+		_roomNames.add("");
+		for (LocationWithFingerprints loc : _fingerprintDb.getAllLocations()) {
+			_roomNames.add(loc.getLocationName());
+		}
+
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+		initUI();
 	}
 
 	@Override
@@ -131,6 +144,9 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 			// set the scan pause (how many ms should the service wait before starting the next scan)
 			_service.setScanPause(_settings.getPauseInterval());
 
+			_uploadHelper = new BleScanServiceUploadHelper(_service, MainActivity.this);
+			_uploadHelper.enableScanUpload("lib-user@dobots.nl", "dodedodo");
+
 			_bound = true;
 		}
 
@@ -138,6 +154,9 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		public void onServiceDisconnected(ComponentName name) {
 			Log.i(TAG, "disconnected from service");
 			_bound = false;
+			// set to null to make garbage collector destroy the helper class. will be recreated
+			// when service connects
+			_uploadHelper = null;
 		}
 	};
 
@@ -148,6 +167,9 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		if (_bound) {
 			unbindService(_connection);
 			_bound = false;
+			// set to null to make garbage collector destroy the helper class. will be recreated
+			// when service connects
+			_uploadHelper = null;
 		}
 	}
 
@@ -175,11 +197,47 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 	private void initUI() {
 		setContentView(R.layout.activity_main);
 
-//		_edtRoomName = (EditText) findViewById(R.id.edtRoomName);
+		_edtRoomName = (EditText) findViewById(R.id.edtRoomName);
 //		_edtRoomName.setText("DoBots Software");
 
 		_spRoomName = (Spinner) findViewById(R.id.spRoomName);
-		_spRoomName.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, roomNames));
+
+		_arrayAdapter = new ArrayAdapter<>(getApplicationContext(), android.R.layout.simple_spinner_dropdown_item, _roomNames);
+		_spRoomName.setAdapter(_arrayAdapter);
+		_spRoomName.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+			@Override
+			public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+				_edtRoomName.setText(_roomNames.get(position));
+			}
+
+			@Override
+			public void onNothingSelected(AdapterView<?> parent) {
+
+			}
+		});
+//		_spRoomName.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+//			@Override
+//			public boolean onItemLongClick(AdapterView<?> parent, View view, final int position, long id) {
+//				AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+//				builder.setTitle("Confirm")
+//						.setMessage("Delete Location " + _roomNames.get(position) + "?")
+//						.setPositiveButton("Yex", new DialogInterface.OnClickListener() {
+//							@Override
+//							public void onClick(DialogInterface dialog, int which) {
+//								_fingerprintDb.deleteLocation(_roomName);
+//								_roomNames.remove(position);
+//							}
+//						})
+//						.setNegativeButton("No", new DialogInterface.OnClickListener() {
+//							@Override
+//							public void onClick(DialogInterface dialog, int which) {
+//								// nothing
+//							}
+//						});
+//				builder.create().show();
+//				return true;
+//			}
+//		});
 
 		Button btnStart = (Button) findViewById(R.id.btnStart);
 		btnStart.setOnClickListener(new View.OnClickListener() {
@@ -221,9 +279,11 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 	private void startFingerprinting() {
 		if (_bound && !_started) {
 
-//			_roomName = _edtRoomName.getText().toString();
-			_roomName = (String)_spRoomName.getSelectedItem();
+			_roomName = _edtRoomName.getText().toString();
+//			_roomName = (String)_spRoomName.getSelectedItem();
 			Fingerprint.resetCounter();
+
+			_roomNames.add(_roomName);
 
 			boolean hasLocation = _fingerprintDb.containsLocation(_roomName);
 			if (hasLocation) {
@@ -541,6 +601,7 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 							public void onClick(DialogInterface dialog, int which) {
 								_settings.deleteFingerprintDb(MainActivity.this);
 								_fingerprintDb = _settings.getDbAdapter(MainActivity.this);
+								_roomNames.clear();
 							}
 						})
 						.setNegativeButton("No", new DialogInterface.OnClickListener() {

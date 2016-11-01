@@ -105,8 +105,8 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 			// set the scan interval (for how many ms should the service scan for devices)
 			_service.setScanInterval(_settings.getScanInterval());
 			// set the scan pause (how many ms should the service wait before starting the next scan)
-//			_service.setScanPause(_settings.getPauseInterval());
-			_service.setScanPause(2000);
+			_service.setScanPause(_settings.getPauseInterval());
+//			_service.setScanPause(2000);
 
 			_bound = true;
 		}
@@ -120,9 +120,6 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 
 	private void initUI() {
 		setContentView(R.layout.activity_locate);
-:(
-
-				)
 		_btnLocate = (Button) findViewById(R.id.btnLocate);
 		_btnLocate.setOnClickListener(new View.OnClickListener() {
 			@Override
@@ -217,34 +214,37 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 
 				for (BleDevice dbDevice : dbFingerprint.getDevices()) {
 
-					if (!Filter.contains(dbDevice.getAddress())) {
-//						Log.w(TAG, "filtered: " + dbDevice.getAddress());
-						continue;
-					}
+//					if (!Filter.contains(dbDevice.getAddress())) {
+////						Log.w(TAG, "filtered: " + dbDevice.getAddress());
+//						continue;
+//					}
 
 					BleDevice device = bleDeviceList.getDevice(dbDevice.getAddress());
 					if (device != null) {
 						sum += Math.pow(device.getAverageRssi() - dbDevice.getRssi(), 2);
 						count++;
 					} else {
-//						sum += Math.pow(dbDevice.getRssi(), 2);
+						sum += Math.pow(dbDevice.getRssi(), 2);
 					}
 
 				}
 
-				double fpDistance = Math.sqrt(sum / count);
+				double fpDistance = 0.0;
+				if ((sum & count) != 0) {
+					fpDistance = Math.sqrt(sum / count);
+				}
 
 				double devNoise = 1.0; // todo: how much???
 				double likelihood = Math.exp(-fpDistance / (2 * Math.pow(devNoise, 2)));
 
 //				Log.i(TAG, String.format("[%s][%d] F: %f, L: %f", dbLoc.getLocationName(), dbFingerprint.getFingerprintId(), fpDistance, likelihood));
 
-				if (fpDistance < maxProb) {
+				if (fpDistance != 0 && fpDistance < maxProb) {
 					maxProb = fpDistance;
 					bestProbFingerprint = dbFingerprint;
 				}
 
-				if (likelihood > maxLikely) {
+				if (likelihood != 1 && likelihood > maxLikely) {
 					maxLikely = likelihood;
 					maxLikelyFingerprint = dbFingerprint;
 				}
