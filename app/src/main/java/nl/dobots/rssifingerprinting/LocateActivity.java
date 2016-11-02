@@ -22,12 +22,16 @@ import nl.dobots.bluenet.ble.extended.structs.BleDeviceList;
 import nl.dobots.bluenet.service.BleScanService;
 import nl.dobots.bluenet.service.callbacks.EventListener;
 import nl.dobots.bluenet.service.callbacks.IntervalScanListener;
+import nl.dobots.bluenet.service.callbacks.ScanDeviceListener;
 import nl.dobots.bluenet.utils.BleLog;
-import nl.dobots.rssifingerprinting.db.Fingerprint;
+//import nl.dobots.rssifingerprinting.db.Fingerprint;
+import nl.dobots.localization.Fingerprint;
+import nl.dobots.localization.FingerprintLocalization;
+import nl.dobots.localization.LocalizationCallback;
 import nl.dobots.rssifingerprinting.db.FingerprintDbAdapter;
-import nl.dobots.rssifingerprinting.db.LocationWithFingerprints;
+//import nl.dobots.rssifingerprinting.db.LocationWithFingerprints;
 
-public class LocateActivity extends AppCompatActivity implements EventListener, IntervalScanListener {
+public class LocateActivity extends AppCompatActivity implements EventListener, IntervalScanListener, ScanDeviceListener, LocalizationCallback {
 
 	private static final String TAG = LocateActivity.class.getCanonicalName();
 
@@ -40,7 +44,7 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 	private FingerprintDbAdapter _fingerprintDb;
 
 	private Button _btnLocate;
-	private ArrayList<LocationWithFingerprints> _locations;
+//	private ArrayList<LocationWithFingerprints> _locations;
 	private BleDeviceList _bleDeviceList;
 
 	private TextView _txtLastUpdate;
@@ -49,10 +53,18 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 	private TextView _txtLastBest;
 	private TextView _txtOldBest;
 
-	private Fingerprint _bestGuess;
-	private Fingerprint _lastBestGuess;
-	private Fingerprint _oldBestGuess;
-	private Fingerprint _location;
+//	private Fingerprint _bestGuess;
+//	private Fingerprint _lastBestGuess;
+//	private Fingerprint _oldBestGuess;
+//	private Fingerprint _location;
+
+
+	private String _bestGuess;
+	private String _lastBestGuess;
+	private String _oldBestGuess;
+	private String _location;
+
+	private FingerprintLocalization _localization;
 
 
 	@Override
@@ -64,9 +76,11 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 		Intent intent = new Intent(this, BleScanService.class);
 		bindService(intent, _connection, Context.BIND_AUTO_CREATE);
 
+		_localization = FingerprintLocalization.getInstance();
+
 		_settings = Settings.getInstance(getApplicationContext());
 		_fingerprintDb = _settings.getDbAdapter(getApplicationContext());
-		_locations = _fingerprintDb.getAllLocations();
+//		_locations = _fingerprintDb.getAllLocations();
 
 		BleDevice.setExpirationTime(Config.SCAN_INTERVAL * 2);
 
@@ -78,6 +92,7 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 	@Override
 	protected void onDestroy() {
 		super.onDestroy();
+		stopTracking();
 		if (_bound) {
 			unbindService(_connection);
 		}
@@ -101,6 +116,8 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 			// devices at every end of an interval, then this is better. additionally it also informs
 			// about the start of an interval.
 			_service.registerIntervalScanListener(LocateActivity.this);
+
+			_service.registerScanDeviceListener(LocateActivity.this);
 
 			// set the scan interval (for how many ms should the service scan for devices)
 			_service.setScanInterval(_settings.getScanInterval());
@@ -126,11 +143,11 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 			public void onClick(View v) {
 				if (!_running) {
 					_btnLocate.setText("Stop");
-					_service.startIntervalScan(Config.BLE_DEVICE_FILTER);
+					startTracking();
 					_running = true;
 				} else {
 					_btnLocate.setText("Locate");
-					_service.stopIntervalScan();
+					stopTracking();
 					_running = false;
 				}
 			}
@@ -142,6 +159,16 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 		_txtLastBest = (TextView) findViewById(R.id.txtLastBest);
 		_txtOldBest = (TextView) findViewById(R.id.txtOldBest);
 
+	}
+
+	private void stopTracking() {
+		_localization.stopLocalization();
+		_service.stopIntervalScan();
+	}
+
+	private void startTracking() {
+		_localization.startLocalization(this);
+		_service.startIntervalScan(Config.BLE_DEVICE_FILTER);
 	}
 
 	@Override
@@ -173,119 +200,154 @@ public class LocateActivity extends AppCompatActivity implements EventListener, 
 //		// for now only "single shot"
 //		_service.stopIntervalScan();
 
-		mHandler.post(new Runnable() {
-			@Override
-			public void run() {
-				// for now only "single shot"
-				compareFingerprint(_locations, _bleDeviceList);
-			}
-		});
+//		mHandler.post(new Runnable() {
+//			@Override
+//			public void run() {
+//				// for now only "single shot"
+//				compareFingerprint(_locations, _bleDeviceList);
+//			}
+//		});
 
 		_service.clearDeviceMap();
 	}
 
-	private void compareFingerprint(ArrayList<LocationWithFingerprints> locations, BleDeviceList bleDeviceList) {
-
-		double maxProb = Double.MAX_VALUE;
-		double maxLikely = 0.0;
-		Fingerprint bestProbFingerprint = null;
-		Fingerprint maxLikelyFingerprint = null;
-
-		for (LocationWithFingerprints dbLoc : locations) {
-
-			for (Fingerprint dbFingerprint : dbLoc.getFingerprints()) {
-
-				int sum = 0;
-				int count = 0;
-
-//				for (BleDevice device : bleDeviceList) {
+//	private void compareFingerprint(ArrayList<LocationWithFingerprints> locations, BleDeviceList bleDeviceList) {
 //
-//					BleDevice dbDevice = dbFingerprint.getDevice(device.getAddress());
-//					if (dbDevice != null) {
+//		double maxProb = Double.MAX_VALUE;
+//		double maxLikely = 0.0;
+//		Fingerprint bestProbFingerprint = null;
+//		Fingerprint maxLikelyFingerprint = null;
+//
+//		for (LocationWithFingerprints dbLoc : locations) {
+//
+//			for (Fingerprint dbFingerprint : dbLoc.getFingerprints()) {
+//
+//				int sum = 0;
+//				int count = 0;
+//
+////				for (BleDevice device : bleDeviceList) {
+////
+////					BleDevice dbDevice = dbFingerprint.getDevice(device.getAddress());
+////					if (dbDevice != null) {
+////						sum += Math.pow(device.getAverageRssi() - dbDevice.getRssi(), 2);
+////						count++;
+////					} else {
+////						// todo: what now???
+////					}
+////					// todo: and do we need to account for the devices which are in the fingerprint but were
+////					// not seen now ???!
+////
+////				}
+//
+//				for (BleDevice dbDevice : dbFingerprint.getDevices()) {
+//
+////					if (!Filter.contains(dbDevice.getAddress())) {
+//////						Log.w(TAG, "filtered: " + dbDevice.getAddress());
+////						continue;
+////					}
+//
+//					BleDevice device = bleDeviceList.getDevice(dbDevice.getAddress());
+//					if (device != null) {
 //						sum += Math.pow(device.getAverageRssi() - dbDevice.getRssi(), 2);
 //						count++;
 //					} else {
-//						// todo: what now???
+//						sum += Math.pow(dbDevice.getRssi(), 2);
 //					}
-//					// todo: and do we need to account for the devices which are in the fingerprint but were
-//					// not seen now ???!
 //
 //				}
+//
+//				double fpDistance = 0.0;
+//				if ((sum & count) != 0) {
+//					fpDistance = Math.sqrt(sum / count);
+//				}
+//
+//				double devNoise = 1.0; // todo: how much???
+//				double likelihood = Math.exp(-fpDistance / (2 * Math.pow(devNoise, 2)));
+//
+////				Log.i(TAG, String.format("[%s][%d] F: %f, L: %f", dbLoc.getLocationName(), dbFingerprint.getFingerprintId(), fpDistance, likelihood));
+//
+//				if (fpDistance != 0 && fpDistance < maxProb) {
+//					maxProb = fpDistance;
+//					bestProbFingerprint = dbFingerprint;
+//				}
+//
+//				if (likelihood != 1 && likelihood > maxLikely) {
+//					maxLikely = likelihood;
+//					maxLikelyFingerprint = dbFingerprint;
+//				}
+//
+//			}
+//		}
+//
+//		if (bestProbFingerprint != null) {
+//			Log.i(TAG, String.format("best Prob FP: %s, %d", bestProbFingerprint.getLocation(), bestProbFingerprint.getFingerprintId()));
+//		}
+//		if (maxLikelyFingerprint != null) {
+//			Log.i(TAG, String.format("max Likely FP: %s, %d", maxLikelyFingerprint.getLocation(), maxLikelyFingerprint.getFingerprintId()));
+//		}
+//
+//		_oldBestGuess = _lastBestGuess;
+//		_lastBestGuess = _bestGuess;
+//
+//		_bestGuess = bestProbFingerprint;
+//
+//		if (_lastBestGuess != null && _bestGuess != null &&
+//				_lastBestGuess.getLocation().equals(_bestGuess.getLocation())) {
+//			_location = _bestGuess;
+//		}
+//
+//		runOnUiThread(new Runnable() {
+//			@Override
+//			public void run() {
+//				if (_bestGuess != null) {
+//					_txtBest.setText(_bestGuess.getLocation());
+//				}
+//				if (_lastBestGuess != null) {
+//					_txtLastBest.setText(_lastBestGuess.getLocation());
+//				}
+//				if (_oldBestGuess != null) {
+//					_txtOldBest.setText(_oldBestGuess.getLocation());
+//				}
+//				if (_location != null) {
+//					_txtLocation.setText(_location.getLocation());
+//				}
+//			}
+//		});
+//
+//	}
 
-				for (BleDevice dbDevice : dbFingerprint.getDevices()) {
+	@Override
+	public void onDeviceScanned(BleDevice device) {
+		_localization.track(device, null);
+	}
 
-//					if (!Filter.contains(dbDevice.getAddress())) {
-////						Log.w(TAG, "filtered: " + dbDevice.getAddress());
-//						continue;
-//					}
-
-					BleDevice device = bleDeviceList.getDevice(dbDevice.getAddress());
-					if (device != null) {
-						sum += Math.pow(device.getAverageRssi() - dbDevice.getRssi(), 2);
-						count++;
-					} else {
-						sum += Math.pow(dbDevice.getRssi(), 2);
-					}
-
-				}
-
-				double fpDistance = 0.0;
-				if ((sum & count) != 0) {
-					fpDistance = Math.sqrt(sum / count);
-				}
-
-				double devNoise = 1.0; // todo: how much???
-				double likelihood = Math.exp(-fpDistance / (2 * Math.pow(devNoise, 2)));
-
-//				Log.i(TAG, String.format("[%s][%d] F: %f, L: %f", dbLoc.getLocationName(), dbFingerprint.getFingerprintId(), fpDistance, likelihood));
-
-				if (fpDistance != 0 && fpDistance < maxProb) {
-					maxProb = fpDistance;
-					bestProbFingerprint = dbFingerprint;
-				}
-
-				if (likelihood != 1 && likelihood > maxLikely) {
-					maxLikely = likelihood;
-					maxLikelyFingerprint = dbFingerprint;
-				}
-
-			}
-		}
-
-		if (bestProbFingerprint != null) {
-			Log.i(TAG, String.format("best Prob FP: %s, %d", bestProbFingerprint.getLocation(), bestProbFingerprint.getFingerprintId()));
-		}
-		if (maxLikelyFingerprint != null) {
-			Log.i(TAG, String.format("max Likely FP: %s, %d", maxLikelyFingerprint.getLocation(), maxLikelyFingerprint.getFingerprintId()));
-		}
+	@Override
+	public void onLocationUpdate(String locationId, String locationName) {
 
 		_oldBestGuess = _lastBestGuess;
 		_lastBestGuess = _bestGuess;
+		_bestGuess = locationName;
 
-		_bestGuess = bestProbFingerprint;
-
-		if (_lastBestGuess != null && _bestGuess != null &&
-				_lastBestGuess.getLocation().equals(_bestGuess.getLocation())) {
-			_location = _bestGuess;
+		if (_lastBestGuess != null && _bestGuess != null && _bestGuess.equals(_lastBestGuess)) {
+			_location = locationName;
 		}
 
 		runOnUiThread(new Runnable() {
 			@Override
 			public void run() {
 				if (_bestGuess != null) {
-					_txtBest.setText(_bestGuess.getLocation());
+					_txtBest.setText(_bestGuess);
 				}
 				if (_lastBestGuess != null) {
-					_txtLastBest.setText(_lastBestGuess.getLocation());
+					_txtLastBest.setText(_lastBestGuess);
 				}
 				if (_oldBestGuess != null) {
-					_txtOldBest.setText(_oldBestGuess.getLocation());
+					_txtOldBest.setText(_oldBestGuess);
 				}
 				if (_location != null) {
-					_txtLocation.setText(_location.getLocation());
+					_txtLocation.setText(_location);
 				}
 			}
 		});
-
 	}
 }

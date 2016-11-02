@@ -9,15 +9,14 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.AdapterView;
@@ -30,6 +29,7 @@ import android.widget.TextView;
 
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -41,12 +41,18 @@ import nl.dobots.bluenet.ble.extended.structs.BleDeviceList;
 import nl.dobots.bluenet.service.BleScanService;
 import nl.dobots.bluenet.service.callbacks.EventListener;
 import nl.dobots.bluenet.service.callbacks.IntervalScanListener;
-import nl.dobots.loopback.util.BleScanServiceUploadHelper;
-import nl.dobots.rssifingerprinting.db.Fingerprint;
+import nl.dobots.bluenet.service.callbacks.ScanDeviceListener;
+import nl.dobots.localization.Fingerprint;
+import nl.dobots.localization.FingerprintLocalization;
+import nl.dobots.localization.FingerprintMap;
+import nl.dobots.localization.FingerprintSample;
+import nl.dobots.localization.FingerprintSamplesMap;
 import nl.dobots.rssifingerprinting.db.FingerprintDbAdapter;
-import nl.dobots.rssifingerprinting.db.LocationWithFingerprints;
+//import nl.dobots.rssifingerprinting.db.Fingerprint;
+//import nl.dobots.rssifingerprinting.db.FingerprintDbAdapter;
+//import nl.dobots.rssifingerprinting.db.LocationWithFingerprints;
 
-public class MainActivity extends AppCompatActivity implements EventListener, IntervalScanListener {
+public class MainActivity extends AppCompatActivity implements EventListener, IntervalScanListener, ScanDeviceListener {
 
 	private static final String TAG = MainActivity.class.getCanonicalName();
 
@@ -58,8 +64,6 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 
 	private boolean _started = false;
 
-	private BleScanServiceUploadHelper _uploadHelper;
-
 	private BleDeviceList _bleDeviceList;
 	private ListView _lvScan;
 
@@ -70,10 +74,19 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 	private Settings _settings;
 	private FingerprintDbAdapter _fingerprintDb;
 
+	private FingerprintLocalization _localization;
+
+	private String _locationId;
 	private String _roomName;
 	private EditText _edtRoomName;
 
 	private ArrayList<String> _roomNames = new ArrayList<>();
+	private String[] baseRooms = {
+		"Kitchen",
+		"Living",
+		"Garage",
+		"Bathroom"
+	};
 //	private String[] _roomNames = {
 //			"Test",
 //			"DoBots Software",
@@ -89,6 +102,9 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 //	};
 	private Spinner _spRoomName;
 	private ArrayAdapter<String> _arrayAdapter;
+	private String _sphereId = "1";
+
+//	private Fingerprint _currentFingerprint;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -101,10 +117,20 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		_settings = Settings.getInstance(getApplicationContext());
 		_fingerprintDb = _settings.getDbAdapter(getApplicationContext());
 
+		_localization = FingerprintLocalization.getInstance();
+
 		_roomNames.add("");
-		for (LocationWithFingerprints loc : _fingerprintDb.getAllLocations()) {
-			_roomNames.add(loc.getLocationName());
+		for (String room : baseRooms) {
+			_roomNames.add(room);
+			Fingerprint fingerprint = _fingerprintDb.getFingerprintForLocation(_sphereId, room);
+			if (fingerprint != null) {
+				_localization.importFingerprint(_sphereId, room, fingerprint);
+			}
 		}
+
+//		for (LocationWithFingerprints loc : _fingerprintDb.getAllLocations()) {
+//			_roomNames.add(loc.getLocationName());
+//		}
 
 		getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -139,13 +165,12 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 			// about the start of an interval.
 			_service.registerIntervalScanListener(MainActivity.this);
 
+			_service.registerScanDeviceListener(MainActivity.this);
+
 			// set the scan interval (for how many ms should the service scan for devices)
 			_service.setScanInterval(_settings.getScanInterval());
 			// set the scan pause (how many ms should the service wait before starting the next scan)
 			_service.setScanPause(_settings.getPauseInterval());
-
-			_uploadHelper = new BleScanServiceUploadHelper(_service, MainActivity.this);
-			_uploadHelper.enableScanUpload("lib-user@dobots.nl", "dodedodo");
 
 			_bound = true;
 		}
@@ -154,22 +179,18 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		public void onServiceDisconnected(ComponentName name) {
 			Log.i(TAG, "disconnected from service");
 			_bound = false;
-			// set to null to make garbage collector destroy the helper class. will be recreated
-			// when service connects
-			_uploadHelper = null;
 		}
 	};
 
 	@Override
 	protected void onPause() {
 		super.onPause();
-		stopFingerprinting();
+		if (_started) {
+			stopFingerprinting();
+		}
 		if (_bound) {
 			unbindService(_connection);
 			_bound = false;
-			// set to null to make garbage collector destroy the helper class. will be recreated
-			// when service connects
-			_uploadHelper = null;
 		}
 	}
 
@@ -272,6 +293,9 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 //			_btnScan.setText(getString(R.string.main_scan));
 			// stop scanning for devices
 			_service.stopIntervalScan();
+			_localization.finalizeFingerprint(_sphereId, _locationId, null);
+			Fingerprint fingerprint = _localization.getFingerprint(_sphereId, _locationId);
+			_fingerprintDb.addFingerprint(fingerprint);
 			_started = false;
 		}
 	}
@@ -280,12 +304,18 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		if (_bound && !_started) {
 
 			_roomName = _edtRoomName.getText().toString();
-//			_roomName = (String)_spRoomName.getSelectedItem();
-			Fingerprint.resetCounter();
+			_locationId = _roomName;
 
-			_roomNames.add(_roomName);
+//			_roomName = (String)_spRoomName.getSelectedItem();
+
+//			Fingerprint.resetCounter();
+
+			if (!_roomNames.contains(_roomName)) {
+				_roomNames.add(_roomName);
+			}
 
 			boolean hasLocation = _fingerprintDb.containsLocation(_roomName);
+//			if (_currentFingerprint != null) {
 			if (hasLocation) {
 				AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
 				builder.setTitle("Location exists already!")
@@ -293,8 +323,8 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 						.setPositiveButton("Append", new DialogInterface.OnClickListener() {
 							@Override
 							public void onClick(DialogInterface dialog, int which) {
-								int lastFingerprintId = _fingerprintDb.getLastFingerprintId(_roomName);
-								Fingerprint.setCounter(lastFingerprintId + 1);
+//								int lastFingerprintId = _fingerprintDb.getLastFingerprintId(_roomName);
+//								Fingerprint.setCounter(lastFingerprintId + 1);
 								startScan();
 							}
 						})
@@ -302,6 +332,8 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 							@Override
 							public void onClick(DialogInterface dialog, int which) {
 								_fingerprintDb.deleteLocation(_roomName);
+								_localization.removeFingerprint(_sphereId, _locationId);
+								_localization.startFingerprint();
 								startScan();
 							}
 						})
@@ -313,6 +345,7 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 						});
 				builder.create().show();
 			} else {
+				_localization.startFingerprint();
 				startScan();
 			}
 
@@ -334,8 +367,6 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 				}
 			}
 
-			_started = true;
-
 			try {
 				if (_fileOpen) {
 					_fingerprintDos.close();
@@ -346,6 +377,8 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 				e.printStackTrace();
 			}
 		}
+
+		_started = true;
 
 		// make sure we start with an empty map
 		_service.clearDeviceMap();
@@ -422,6 +455,11 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 	};
 
 	@Override
+	public void onDeviceScanned(BleDevice device) {
+		_localization.feedMeasurement(device, null, null);
+	}
+
+	@Override
 	public void onScanStart() {
 		runOnUiThread(new Runnable() {
 			@Override
@@ -451,36 +489,39 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		});
 		_lastUpdate = System.currentTimeMillis();
 
-		Fingerprint fingerprint = createFingerprint(_roomName, _bleDeviceList);
-		if (Config.WRITE_TO_DB) {
-			if (!_fingerprintDb.addFingerprint(fingerprint)) {
-				Log.e(TAG, "failed to write fingerprint do db!");
-			}
-		}
-		if (Config.LOG_TO_FILE) {
-			logFingerprint(fingerprint);
-		}
-
-		_service.clearDeviceMap();
+//		Fingerprint fingerprint = createFingerprint(_roomName, _bleDeviceList);
+//		if (Config.WRITE_TO_DB) {
+//			if (!_fingerprintDb.addFingerprint(fingerprint)) {
+//				Log.e(TAG, "failed to write fingerprint do db!");
+//			}
+//		}
+//		if (Config.LOG_TO_FILE) {
+//			logFingerprint(fingerprint);
+//		}
+//
+//		_service.clearDeviceMap();
 	}
 
-	private Fingerprint createFingerprint(String roomName, BleDeviceList bleDeviceList) {
-
-		Fingerprint fingerprint = new Fingerprint();
-		fingerprint.setLocation(roomName);
-		fingerprint.setDeviceList((BleDeviceList) bleDeviceList.clone());
-
-		return fingerprint;
-
-	}
+//	private Fingerprint createFingerprint(String roomName, BleDeviceList bleDeviceList) {
+//
+//		Fingerprint fingerprint = new Fingerprint();
+//		fingerprint.setLocation(roomName);
+//		fingerprint.setDeviceList((BleDeviceList) bleDeviceList.clone());
+//
+//		return fingerprint;
+//
+//	}
 
 	private void logFingerprint(Fingerprint fingerprint) {
 
 		if (_fileOpen) {
-			Date timestamp = new Date();
-			String roomName = fingerprint.getLocation();
-			for (BleDevice device : fingerprint.getDevices()) {
-				writeToFile(timestamp, roomName, device.getAddress(), device.getAverageRssi(), _fingerprintDos);
+			String roomName = fingerprint.getName();
+			FingerprintSamplesMap samples = fingerprint.getSamples();
+			for (Long timestamp : samples.keySet()) {
+				FingerprintSample sample = samples.get(timestamp);
+				for (String device : sample.keySet()) {
+					writeToFile(timestamp, roomName, device, sample.get(device), _fingerprintDos);
+				}
 			}
 			checkFileSizes();
 		}
@@ -509,10 +550,10 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 		return true;
 	}
 
-	private void writeToFile(Date timestamp, String roomName, String address, int rssi, DataOutputStream dos) {
+	private void writeToFile(Long timestamp, String roomName, String address, double rssi, DataOutputStream dos) {
 //		if (_fileOpen) {
 			try {
-				String line = String.format("%s,%s,%s,%d\n", Config.SDF_TIMESTAMP.format(timestamp), roomName, address, rssi);
+				String line = String.format("%s,%s,%s,%.3f\n", Config.SDF_TIMESTAMP.format(new Date(timestamp)), roomName, address, rssi);
 				dos.write(line.getBytes());
 				dos.flush();
 
@@ -520,6 +561,46 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 				e.printStackTrace();
 			}
 //		}
+	}
+
+	private void writeToFile(FingerprintMap fingerprints, String fileName) {
+
+		if (Build.VERSION.SDK_INT >= 23) {
+			int permissionCheck = ContextCompat.checkSelfPermission(this,
+					Manifest.permission.WRITE_EXTERNAL_STORAGE);
+			if (permissionCheck != PackageManager.PERMISSION_GRANTED) {
+				Log.w(TAG, "Ask for permission");
+				this.requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE},
+						123);
+				return;
+			}
+		}
+
+		File exportFile = new File(fileName);
+		File directory = exportFile.getParentFile();
+
+		if (!directory.exists()) {
+			Log.i(TAG, "creating export directory");
+			directory.mkdirs();
+		}
+
+		DataOutputStream dos;
+		try {
+			dos = new DataOutputStream(new FileOutputStream(exportFile));
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+			return;
+		}
+
+		try {
+			dos.write(fingerprints.toIndentString().getBytes());
+//			dos.writeChars(String.format("%s,%s,%s,%s\n", KEY_ROWID, KEY_LOCATION_NAME, KEY_DEVICE_NAME, KEY_DEVICE_ADDRESS));
+//			dos.write(String.format("%s,%s,%s,%s\n", KEY_LOCATION, KEY_FINGERPRINT_ID, KEY_DEVICE_ADDRESS, KEY_DEVICE_RSSI).getBytes());
+		} catch (IOException e) {
+			e.printStackTrace();
+			return;
+		}
+
 	}
 
 	private void checkFileSizes() {
@@ -569,59 +650,67 @@ public class MainActivity extends AppCompatActivity implements EventListener, In
 				break;
 			}
 			case R.id.action_exportDB: {
-				String fileName = Config.LOG_FILES_DIRECTORY + "/db_" + Config.SDF_FILENAME.format(new Date()) + ".csv";
-				if (!_fingerprintDb.exportDB(fileName)) {
-					AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-					builder.setTitle("Failure")
-							.setMessage("Failed to export DB")
-							.setNeutralButton("OK", new DialogInterface.OnClickListener() {
-								@Override
-								public void onClick(DialogInterface dialog, int which) {
-									MainActivity.this.finish();
-								}
-							});
-					builder.create().show();
-				}
+				exportFingerprints();
+
+//				if (!_fingerprintDb.exportDB(fileName)) {
+//					AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+//					builder.setTitle("Failure")
+//							.setMessage("Failed to export DB")
+//							.setNeutralButton("OK", new DialogInterface.OnClickListener() {
+//								@Override
+//								public void onClick(DialogInterface dialog, int which) {
+//									MainActivity.this.finish();
+//								}
+//							});
+//					builder.create().show();
+//				}
 				break;
 			}
-			case R.id.action_filter: {
-				_fingerprintDb.filterDB();
-				break;
-			}
+//			case R.id.action_filter: {
+//				_fingerprintDb.filterDB();
+//				break;
+//			}
 			case R.id.action_locate: {
 				startActivity(new Intent(this, LocateActivity.class));
 				break;
 			}
-			case R.id.action_deleteDB: {
-				AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
-				builder.setTitle("Attention")
-						.setMessage("Are you sure you want to delete the DB?")
-						.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
-							@Override
-							public void onClick(DialogInterface dialog, int which) {
-								_settings.deleteFingerprintDb(MainActivity.this);
-								_fingerprintDb = _settings.getDbAdapter(MainActivity.this);
-								_roomNames.clear();
-							}
-						})
-						.setNegativeButton("No", new DialogInterface.OnClickListener() {
-							@Override
-							public void onClick(DialogInterface dialog, int which) {
-
-							}
-						});
-				builder.create().show();
-			}
+//			case R.id.action_deleteDB: {
+//				AlertDialog.Builder builder = new AlertDialog.Builder(MainActivity.this);
+//				builder.setTitle("Attention")
+//						.setMessage("Are you sure you want to delete the DB?")
+//						.setPositiveButton("Yes", new DialogInterface.OnClickListener() {
+//							@Override
+//							public void onClick(DialogInterface dialog, int which) {
+//								_settings.deleteFingerprintDb(MainActivity.this);
+//								_fingerprintDb = _settings.getDbAdapter(MainActivity.this);
+//								_roomNames.clear();
+//							}
+//						})
+//						.setNegativeButton("No", new DialogInterface.OnClickListener() {
+//							@Override
+//							public void onClick(DialogInterface dialog, int which) {
+//
+//							}
+//						});
+//				builder.create().show();
+//			}
 		}
 
 		return super.onOptionsItemSelected(item);
+	}
+
+	private void exportFingerprints() {
+		String fileName = Config.LOG_FILES_DIRECTORY + "/db_" + Config.SDF_FILENAME.format(new Date()) + ".csv";
+
+		FingerprintMap fpMap = _localization.getTrainedFingerprints();
+		writeToFile(fpMap, fileName);
 	}
 
 	@Override
 	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
 		if (requestCode == 123) {
 			if (grantResults.length > 0 &&	grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-				startScan();
+				exportFingerprints();
 			} else {
 				Log.e(TAG, "Can't write fingerprints without access to storage!");
 			}

@@ -18,9 +18,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
-import java.util.HashMap;
 
-import nl.dobots.bluenet.ble.extended.structs.BleDevice;
+import nl.dobots.localization.Fingerprint;
+import nl.dobots.localization.FingerprintSample;
+import nl.dobots.localization.FingerprintSamplesMap;
 
 /**
  * Copyright (c) 2016 Dominik Egger <dominik@dobots.nl>. All rights reserved.
@@ -201,46 +202,91 @@ public class FingerprintDbAdapter {
 	public boolean addFingerprint(Fingerprint fingerprint) {
 		ContentValues values = new ContentValues();
 
-		for (BleDevice device : fingerprint.getDevices()) {
-			values.put(KEY_LOCATION, fingerprint.getLocation());
-			values.put(KEY_FINGERPRINT_ID, fingerprint.getFingerprintId());
-			values.put(KEY_DEVICE_ADDRESS, device.getAddress());
-			values.put(KEY_DEVICE_RSSI, device.getAverageRssi());
+		FingerprintSamplesMap samples = fingerprint.getSamples();
+		for (Long timestamps : samples.keySet()) {
+			FingerprintSample sample = samples.get(timestamps);
 
-			if (replaceEntry(values) == -1) {
-				Log.e(TAG, "failed to add db entry");
-				return false;
+			for (String device : sample.keySet()) {
+				double rssi = sample.get(device);
+
+				values.put(KEY_LOCATION, fingerprint.getName());
+				values.put(KEY_FINGERPRINT_ID, timestamps);
+				values.put(KEY_DEVICE_ADDRESS, device);
+				values.put(KEY_DEVICE_RSSI, rssi);
+
+				if (replaceEntry(values) == -1) {
+					Log.e(TAG, "failed to add db entry");
+					return false;
+				}
 			}
 		}
 
 		return true;
 	}
 
-	public ArrayList<Fingerprint> getFingerprintsForLocation(String location) {
-		HashMap<Integer, Fingerprint> map = new HashMap<>();
+	public Fingerprint getFingerprintForLocation(String sphereId, String location) {
 
 		Cursor cursor = fetchAllEntries(location);
 
-		while (!cursor.isAfterLast()) {
-			int fingerprintId = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_FINGERPRINT_ID));
+		FingerprintSamplesMap list = new FingerprintSamplesMap();
 
-			Fingerprint fingerprint;
-			if (map.containsKey(fingerprintId)) {
-				fingerprint = map.get(fingerprintId);
-			} else {
-				fingerprint = new Fingerprint(location, fingerprintId);
-				map.put(fingerprintId, fingerprint);
+		while (!cursor.isAfterLast()) {
+			long timestamp = cursor.getLong(cursor.getColumnIndexOrThrow(KEY_FINGERPRINT_ID));
+
+			FingerprintSample sample = list.get(timestamp);
+			if (sample == null) {
+				sample = new FingerprintSample();
+				list.put(timestamp, sample);
 			}
 
 			String deviceAddress = cursor.getString(cursor.getColumnIndexOrThrow(KEY_DEVICE_ADDRESS));
-			int deviceRssi = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_DEVICE_RSSI));
+			double deviceRssi = cursor.getDouble(cursor.getColumnIndexOrThrow(KEY_DEVICE_RSSI));
 
-			fingerprint.addDevice(deviceAddress, deviceRssi);
+			sample.put(deviceAddress, deviceRssi);
 
+			cursor.moveToNext();
 		}
 
-		return new ArrayList<>(map.values());
+		if (list.isEmpty()) {
+			return null;
+		} else {
+			Fingerprint fingerprint = new Fingerprint();
+
+			fingerprint.setLocationId(location);
+			fingerprint.setName(location);
+			fingerprint.setSamples(list);
+			fingerprint.setSphereId(sphereId);
+
+			return fingerprint;
+		}
+
 	}
+
+//	public ArrayList<Fingerprint> getFingerprintsForLocation(String location) {
+//		HashMap<Integer, Fingerprint> map = new HashMap<>();
+//
+//		Cursor cursor = fetchAllEntries(location);
+//
+//		while (!cursor.isAfterLast()) {
+//			int fingerprintId = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_FINGERPRINT_ID));
+//
+//			Fingerprint fingerprint;
+//			if (map.containsKey(fingerprintId)) {
+//				fingerprint = map.get(fingerprintId);
+//			} else {
+//				fingerprint = new Fingerprint(location, fingerprintId);
+//				map.put(fingerprintId, fingerprint);
+//			}
+//
+//			String deviceAddress = cursor.getString(cursor.getColumnIndexOrThrow(KEY_DEVICE_ADDRESS));
+//			int deviceRssi = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_DEVICE_RSSI));
+//
+//			fingerprint.addDevice(deviceAddress, deviceRssi);
+//
+//		}
+//
+//		return new ArrayList<>(map.values());
+//	}
 
 	public int getLastFingerprintId(String location) {
 		Cursor cursor = mDb.rawQuery("select * from " + TABLE_NAME + " where " + KEY_LOCATION + "=\"" + location + "\" order by " + KEY_FINGERPRINT_ID + " DESC limit 1", null);
@@ -252,35 +298,35 @@ public class FingerprintDbAdapter {
 	}
 
 
-	public ArrayList<LocationWithFingerprints> getAllLocations() {
-
-		HashMap<String, LocationWithFingerprints> map = new HashMap<>();
-
-		Cursor cursor = fetchAllEntries();
-
-		// as long as there are entries
-		while (!cursor.isAfterLast()) {
-
-			String locationName = cursor.getString(cursor.getColumnIndexOrThrow(KEY_LOCATION));
-			int fingerprintId = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_FINGERPRINT_ID));
-			String deviceAddress = cursor.getString(cursor.getColumnIndexOrThrow(KEY_DEVICE_ADDRESS));
-
-			int deviceRssi = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_DEVICE_RSSI));
-
-			LocationWithFingerprints location;
-			if (map.containsKey(locationName)) {
-				location = map.get(locationName);
-			} else {
-				location = new LocationWithFingerprints(locationName);
-				map.put(locationName, location);
-			}
-			location.addFingerprint(fingerprintId, deviceAddress, deviceRssi);
-
-			cursor.moveToNext();
-		}
-
-		return new ArrayList<>(map.values());
-	}
+//	public ArrayList<LocationWithFingerprints> getAllLocations() {
+//
+//		HashMap<String, LocationWithFingerprints> map = new HashMap<>();
+//
+//		Cursor cursor = fetchAllEntries();
+//
+//		// as long as there are entries
+//		while (!cursor.isAfterLast()) {
+//
+//			String locationName = cursor.getString(cursor.getColumnIndexOrThrow(KEY_LOCATION));
+//			int fingerprintId = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_FINGERPRINT_ID));
+//			String deviceAddress = cursor.getString(cursor.getColumnIndexOrThrow(KEY_DEVICE_ADDRESS));
+//
+//			int deviceRssi = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_DEVICE_RSSI));
+//
+//			LocationWithFingerprints location;
+//			if (map.containsKey(locationName)) {
+//				location = map.get(locationName);
+//			} else {
+//				location = new LocationWithFingerprints(locationName);
+//				map.put(locationName, location);
+//			}
+//			location.addFingerprint(fingerprintId, deviceAddress, deviceRssi);
+//
+//			cursor.moveToNext();
+//		}
+//
+//		return new ArrayList<>(map.values());
+//	}
 
 
 	private long createEntry(String location, int fingerprintId, String deviceAddress, int deviceRssi) {

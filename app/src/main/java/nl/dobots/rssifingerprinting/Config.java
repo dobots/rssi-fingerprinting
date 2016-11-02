@@ -30,18 +30,19 @@ public class Config {
 	// filename of the database
 	public static final String DATABASE_NAME = "fingerprints.db";
 
-	public static final int SCAN_INTERVAL = 2000; //  second scan intervals
+	public static final int SCAN_INTERVAL = 1000; //  second scan intervals
 	public static final int SCAN_PAUSE = 0; // no pause
 
 	public static final long MIN_FREE_SPACE = 10 * 1024 * 1024; // 10 MB
 	public static final long MAX_BACKUP_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
 
-	public static final boolean LOG_TO_FILE = true;
+	public static final boolean LOG_TO_FILE = false;
 	public static final boolean WRITE_TO_DB = true;
 
 	public static final String LOG_FILES_DIRECTORY = Environment.getExternalStorageDirectory().getPath() + "/dobots/fingerprinting";
 //	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.doBeacon;
-	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.all;
+//	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.all;
+	public static final BleDeviceFilter BLE_DEVICE_FILTER = BleDeviceFilter.anyStone;
 
 	public static final SimpleDateFormat SDF_TIMESTAMP = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss");
 	public static final SimpleDateFormat SDF_DISPLAY_TIMESTAMP = new SimpleDateFormat("MM-dd HH:mm:ss");

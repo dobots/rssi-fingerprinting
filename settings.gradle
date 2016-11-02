@@ -1,3 +1,4 @@
 include ':app'
-include ':crownstone-loopback-sdk:bluenet-lib'
-include ':crownstone-loopback-sdk:loopback-sdk-android'
+//include ':bluenet'
+//include ':localization'
+include ':localization:bluenet'
